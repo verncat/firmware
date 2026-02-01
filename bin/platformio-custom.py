@@ -215,7 +215,7 @@ except subprocess.CalledProcessError:
     repo_owner = "unknown"
 
 jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
-with open(jsonLoc) as f:
+with open(jsonLoc, encoding='utf-8') as f:
     jsonStr = re.sub("//.*","", f.read(), flags=re.MULTILINE)
     userPrefs = json.loads(jsonStr)
 

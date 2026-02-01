@@ -179,6 +179,41 @@ uint32_t radioGeneration;
 // FIXME - move this somewhere else
 extern void getMacAddr(uint8_t *dmac);
 
+static void getMeshMacAddr(uint8_t *dmac)
+{
+    getMacAddr(dmac);
+
+#if defined(ARCH_ESP32) && defined(MESHTASTIC_RANDOMIZE_MESH_MAC) && (MESHTASTIC_RANDOMIZE_MESH_MAC)
+    // Optional privacy feature: randomize the MAC address used for Meshtastic identity (User.macaddr / NodeNum derivation).
+    // This does NOT change the hardware Wi-Fi/BLE MAC.
+    Preferences prefs;
+    prefs.begin("meshtastic", false);
+
+    uint8_t stored[6] = {0};
+    const size_t got = prefs.getBytes("meshmac", stored, sizeof(stored));
+    const bool isAllZero = memfll(stored, 0, sizeof(stored));
+    if (got == sizeof(stored) && !isAllZero) {
+        memcpy(dmac, stored, sizeof(stored));
+        prefs.end();
+        return;
+    }
+
+    // Generate a locally administered, unicast MAC.
+    uint8_t generated[6];
+    do {
+        for (size_t i = 0; i < sizeof(generated); i++) {
+            generated[i] = static_cast<uint8_t>(random(0, 256));
+        }
+    } while (memfll(generated, 0, sizeof(generated)));
+
+    // Force unicast + globally administered (UAA-style): multicast=0, LAA=0
+    generated[0] = static_cast<uint8_t>(generated[0] & 0xFC);
+    prefs.putBytes("meshmac", generated, sizeof(generated));
+    prefs.end();
+    memcpy(dmac, generated, sizeof(generated));
+#endif
+}
+
 /**
  *
  * Normally userids are unique and start with +country code to look like Signal phone numbers.
@@ -1117,7 +1152,7 @@ void NodeDB::installDefaultDeviceState()
 void NodeDB::pickNewNodeNum()
 {
     NodeNum nodeNum = myNodeInfo.my_node_num;
-    getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
+    getMeshMacAddr(ourMacAddr); // Make sure ourMacAddr is set
     if (nodeNum == 0) {
         // Pick an initial nodenum based on the macaddr
         nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];

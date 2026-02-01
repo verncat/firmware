@@ -2391,7 +2391,11 @@ bool CannedMessageModule::saveProtoForModule()
  */
 void CannedMessageModule::installDefaultCannedMessageModuleConfig()
 {
+#ifdef USERPREFS_CANNED_MESSAGES
+    strncpy(cannedMessageModuleConfig.messages, USERPREFS_CANNED_MESSAGES, sizeof(cannedMessageModuleConfig.messages));
+#else
     strncpy(cannedMessageModuleConfig.messages, "Hi|Bye|Yes|No|Ok", sizeof(cannedMessageModuleConfig.messages));
+#endif
 }
 
 /**
