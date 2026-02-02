@@ -28,6 +28,7 @@ class menuHandler
         gps_position_broadcast_menu,
         compass_point_north_menu,
         reset_node_db_menu,
+                factory_reset_menu,
         buzzermodemenupicker,
         mui_picker,
         tftcolormenupicker,
@@ -91,6 +92,7 @@ class menuHandler
     static void TFTColorPickerMenu(OLEDDisplay *display);
     static void nodeListMenu();
     static void resetNodeDBMenu();
+    static void factoryResetMenu();
     static void BrightnessPickerMenu();
     static void rebootMenu();
     static void shutdownMenu();

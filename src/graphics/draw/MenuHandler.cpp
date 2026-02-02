@@ -1039,7 +1039,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, WiFiToggle, PowerMenu, FactoryReset, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -1068,6 +1068,9 @@ void menuHandler::systemBaseMenu()
     }
     optionsEnumArray[options++] = PowerMenu;
 
+    optionsArray[options] = "Factory Reset";
+    optionsEnumArray[options++] = FactoryReset;
+
     if (test_enabled) {
         optionsArray[options] = "Test Menu";
         optionsEnumArray[options++] = Test;
@@ -1090,6 +1093,9 @@ void menuHandler::systemBaseMenu()
             screen->runNow();
         } else if (selected == PowerMenu) {
             menuHandler::menuQueue = menuHandler::power_menu;
+            screen->runNow();
+        } else if (selected == FactoryReset) {
+            menuQueue = factory_reset_menu;
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
@@ -1529,6 +1535,38 @@ void menuHandler::resetNodeDBMenu()
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         } else if (selected == 0) {
             menuQueue = node_base_menu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::factoryResetMenu()
+{
+    // Two reset levels:
+    // 1) config-only reset (preserves BLE bonds / key where possible)
+    // 2) full factory reset (wipes BLE bonds; on ESP32 also erases NVS)
+    static const char *optionsArray[] = {"Back", "Reset Config", "Full Reset (Erase BLE)"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Confirm Factory Reset";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1 || selected == 2) {
+            disableBluetooth();
+            screen->setFrames(Screen::FOCUS_DEFAULT);
+        }
+
+        if (selected == 1) {
+            LOG_INFO("Initiate factory config reset");
+            nodeDB->factoryReset(false);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        } else if (selected == 2) {
+            LOG_INFO("Initiate full factory reset");
+            nodeDB->factoryReset(true);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        } else if (selected == 0) {
+            menuQueue = system_base_menu;
             screen->runNow();
         }
     };
@@ -2667,6 +2705,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case reset_node_db_menu:
         resetNodeDBMenu();
+        break;
+    case factory_reset_menu:
+        factoryResetMenu();
         break;
     case buzzermodemenupicker:
         BuzzerModeMenu();
