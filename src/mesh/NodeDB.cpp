@@ -182,23 +182,35 @@ extern void getMacAddr(uint8_t *dmac);
 static void getMeshMacAddr(uint8_t *dmac)
 {
     getMacAddr(dmac);
+    LOG_DEBUG("getMeshMacAddr: Hardware MAC: %02x:%02x:%02x:%02x:%02x:%02x", 
+              dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
 
-#if defined(ARCH_ESP32) && defined(MESHTASTIC_RANDOMIZE_MESH_MAC) && (MESHTASTIC_RANDOMIZE_MESH_MAC)
+#if 1 || defined(ARCH_ESP32) && defined(MESHTASTIC_RANDOMIZE_MESH_MAC) && (MESHTASTIC_RANDOMIZE_MESH_MAC)
     // Optional privacy feature: randomize the MAC address used for Meshtastic identity (User.macaddr / NodeNum derivation).
     // This does NOT change the hardware Wi-Fi/BLE MAC.
+    LOG_DEBUG("getMeshMacAddr: Entering randomization code path");
+    
     Preferences prefs;
     prefs.begin("meshtastic", false);
 
-    uint8_t stored[6] = {0};
-    const size_t got = prefs.getBytes("meshmac", stored, sizeof(stored));
-    const bool isAllZero = memfll(stored, 0, sizeof(stored));
-    if (got == sizeof(stored) && !isAllZero) {
+    // fixme: возможно отдает мусор, когда option не заполнен?
+    const bool isKeyExists = prefs.isKey("meshmac");
+
+    LOG_INFO("getMeshMacAddr: isKeyExists=%d", isKeyExists);
+    if (isKeyExists) {
+        uint8_t stored[6] = {0};
+        const size_t got = prefs.getBytes("meshmac", stored, sizeof(stored));
+        LOG_DEBUG("getMeshMacAddr: Read %d bytes from Preferences", got);
+        LOG_INFO("getMeshMacAddr: Stored MAC: %02x:%02x:%02x:%02x:%02x:%02x", 
+                 stored[0], stored[1], stored[2], stored[3], stored[4], stored[5]);
         memcpy(dmac, stored, sizeof(stored));
+        LOG_DEBUG("getMeshMacAddr: Using stored MAC from Preferences");
         prefs.end();
         return;
     }
 
     // Generate a locally administered, unicast MAC.
+    LOG_DEBUG("getMeshMacAddr: Key not found, generating new MAC");
     uint8_t generated[6];
     do {
         for (size_t i = 0; i < sizeof(generated); i++) {
@@ -208,7 +220,11 @@ static void getMeshMacAddr(uint8_t *dmac)
 
     // Force unicast + globally administered (UAA-style): multicast=0, LAA=0
     generated[0] = static_cast<uint8_t>(generated[0] & 0xFC);
+    LOG_INFO("getMeshMacAddr: Generated MAC: %02x:%02x:%02x:%02x:%02x:%02x", 
+             generated[0], generated[1], generated[2], generated[3], generated[4], generated[5]);
+    
     prefs.putBytes("meshmac", generated, sizeof(generated));
+    LOG_DEBUG("getMeshMacAddr: Saved new MAC to Preferences");
     prefs.end();
     memcpy(dmac, generated, sizeof(generated));
 #endif
@@ -1125,6 +1141,10 @@ void NodeDB::installDefaultDeviceState()
 
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
+    // Reset nodenum so it will be regenerated from the (potentially new) meshmac
+    myNodeInfo.my_node_num = 0;
+    LOG_DEBUG("installDefaultDeviceState: Reset my_node_num to 0 for regeneration");
+    
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
 #ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
@@ -1152,10 +1172,20 @@ void NodeDB::installDefaultDeviceState()
 void NodeDB::pickNewNodeNum()
 {
     NodeNum nodeNum = myNodeInfo.my_node_num;
+    LOG_DEBUG("pickNewNodeNum: Loaded nodenum from storage: 0x%08x", nodeNum);
+    
     getMeshMacAddr(ourMacAddr); // Make sure ourMacAddr is set
+    LOG_DEBUG("pickNewNodeNum: ourMacAddr after getMeshMacAddr: %02x:%02x:%02x:%02x:%02x:%02x", 
+              ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4], ourMacAddr[5]);
+    
     if (nodeNum == 0) {
         // Pick an initial nodenum based on the macaddr
         nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+        LOG_INFO("pickNewNodeNum: Generated NEW nodenum from MAC: 0x%08x", nodeNum);
+    } else {
+        NodeNum expectedFromMAC = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+        LOG_DEBUG("pickNewNodeNum: Using existing nodenum 0x%08x (expected from current MAC: 0x%08x)", 
+                  nodeNum, expectedFromMAC);
     }
 
     meshtastic_NodeInfoLite *found;
