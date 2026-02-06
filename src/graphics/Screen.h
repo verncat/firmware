@@ -328,6 +328,16 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
+    void startFactoryResetAnimation()
+    {
+        ScreenCmd cmd;
+        cmd.cmd = Cmd::START_FACTORY_RESET_ANIMATION;
+        enqueueCmd(cmd);
+    }
+
+    // Play skull animation synchronously (for menu actions)
+    void playSkullAnimation();
+
     // Function to allow the AccelerometerThread to set the heading if a sensor provides it
     // Mutex needed?
     void setHeading(long _heading)
@@ -672,6 +682,7 @@ class Screen : public concurrency::OSThread
     void handleSetOn(bool on, FrameCallback einkScreensaver = NULL);
     void handleOnPress();
     void handleStartFirmwareUpdateScreen();
+    void handleFactoryResetAnimation();
 
     // Info collected by setFrames method.
     // Index location of specific frames.

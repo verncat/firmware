@@ -873,6 +873,9 @@ int32_t Screen::runOnce()
         case Cmd::START_FIRMWARE_UPDATE_SCREEN:
             handleStartFirmwareUpdateScreen();
             break;
+        case Cmd::START_FACTORY_RESET_ANIMATION:
+            handleFactoryResetAnimation();
+            break;
         case Cmd::STOP_ALERT_FRAME:
             NotificationRenderer::pauseBanner = false;
             break;
@@ -1342,6 +1345,106 @@ void Screen::handleStartFirmwareUpdateScreen()
 
     static FrameCallback frames[] = {graphics::NotificationRenderer::drawFrameFirmware};
     setFrameImmediateDraw(frames);
+}
+
+void Screen::handleFactoryResetAnimation()
+{
+    LOG_DEBUG("Show factory reset animation");
+    showingNormalScreen = false;
+    handleSetOn(true); // Ensure screen is on
+    
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for animation
+#endif
+
+    // Draw animation: skull with clacking jaw (3 frames)
+    for (int cycle = 0; cycle < 3; cycle++) {
+        // Frame 1: Closed mouth
+        dispdev->clear();
+        dispdev->drawXbm((dispdev->getWidth() - SKULL_WIDTH) / 2, 
+                        (dispdev->getHeight() - SKULL_HEIGHT) / 2,
+                        SKULL_WIDTH, SKULL_HEIGHT, skull_frame1);
+        dispdev->display();
+        delay(150);
+        
+        // Frame 2: Opening
+        dispdev->clear();
+        dispdev->drawXbm((dispdev->getWidth() - SKULL_WIDTH) / 2,
+                        (dispdev->getHeight() - SKULL_HEIGHT) / 2,
+                        SKULL_WIDTH, SKULL_HEIGHT, skull_frame2);
+        dispdev->display();
+        delay(150);
+        
+        // Frame 3: Wide open
+        dispdev->clear();
+        dispdev->drawXbm((dispdev->getWidth() - SKULL_WIDTH) / 2,
+                        (dispdev->getHeight() - SKULL_HEIGHT) / 2,
+                        SKULL_WIDTH, SKULL_HEIGHT, skull_frame3);
+        dispdev->display();
+        delay(200);
+        
+        // Frame 2: Closing
+        dispdev->clear();
+        dispdev->drawXbm((dispdev->getWidth() - SKULL_WIDTH) / 2,
+                        (dispdev->getHeight() - SKULL_HEIGHT) / 2,
+                        SKULL_WIDTH, SKULL_HEIGHT, skull_frame2);
+        dispdev->display();
+        delay(150);
+    }
+}
+
+void Screen::playSkullAnimation()
+{
+    if (!useDisplay)
+        return;
+        
+    LOG_DEBUG("Play skull animation synchronously (%d frames)", SKULL_FRAME_COUNT);
+    handleSetOn(true); // Ensure screen is on
+    
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
+#endif
+
+    // 2x scale with nearest neighbor interpolation
+    const int scale = 2;
+    const int scaledWidth = SKULL_WIDTH * scale;
+    const int scaledHeight = SKULL_HEIGHT * scale;
+    
+    // Calculate center position for 2x scaled image
+    int x = (dispdev->getWidth() - scaledWidth) / 2;
+    int y = (dispdev->getHeight() - scaledHeight) / 2;
+    
+    // Draw animation: iterate through all frames
+    for (int i = 0; i < SKULL_FRAME_COUNT; i++) {
+        dispdev->clear();
+        
+        // Read frame pointer from PROGMEM
+        const uint8_t* frame = (const uint8_t*)pgm_read_ptr(&skull_frame_frames[i]);
+        
+        // Draw 2x scaled with nearest neighbor (each pixel becomes 2x2 block)
+        int bytes_per_row = (SKULL_WIDTH + 7) / 8;
+        for (int sy = 0; sy < SKULL_HEIGHT; sy++) {
+            for (int sx = 0; sx < SKULL_WIDTH; sx++) {
+                // Read pixel from bitmap
+                int byte_index = sy * bytes_per_row + sx / 8;
+                int bit_index = 7 - (sx % 8);
+                bool pixel = (pgm_read_byte(&frame[byte_index]) & (1 << bit_index)) != 0;
+                
+                // Draw 2x2 block for this pixel
+                if (pixel) {
+                    dispdev->setPixel(x + sx * scale, y + sy * scale);
+                    dispdev->setPixel(x + sx * scale + 1, y + sy * scale);
+                    dispdev->setPixel(x + sx * scale, y + sy * scale + 1);
+                    dispdev->setPixel(x + sx * scale + 1, y + sy * scale + 1);
+                }
+            }
+        }
+        
+        dispdev->display();
+        
+        // Frame delay: 50ms per frame for smooth animation
+        delay(50);
+    }
 }
 
 void Screen::blink()

@@ -986,6 +986,7 @@ void menuHandler::homeBaseMenu()
             saveUIConfig();
 #endif
         } else if (selected == Sleep) {
+            screen->playSkullAnimation();
             screen->setOn(false);
         } else if (selected == Position) {
             service->refreshLocalMeshNode();

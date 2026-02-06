@@ -551,6 +551,15 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
 bool NodeDB::factoryReset(bool eraseBleBonds)
 {
     LOG_INFO("Perform factory reset!");
+    
+    // Show hacker skull animation on screen
+#ifdef HAS_SCREEN
+    extern graphics::Screen *screen;
+    if (screen) {
+        screen->startFactoryResetAnimation();
+    }
+#endif
+    
     // first, remove the "/prefs" (this removes most prefs)
     spiLock->lock();
     rmDir("/prefs"); // this uses spilock internally...
